@@ -1,0 +1,28 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-4-20250514",
+  "permission": {
+    "bash": "allow",
+    "edit": "allow"
+  },
+  "server": {
+    "port": 4096,
+    "hostname": "127.0.0.1",
+    "cors": ["http://localhost:3000"]
+  },
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "description": "Orchestrates file processing pipelines: ingests files, runs analysis, generates output",
+      "prompt": "{file:./prompts/build.txt}",
+      "tools": {
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    }
+  },
+  "watcher": {
+    "ignore": ["node_modules/**", "output/**", "web/**"]
+  }
+}

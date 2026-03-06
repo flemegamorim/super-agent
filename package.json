@@ -1,0 +1,16 @@
+{
+  "name": "super-agent-node",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Agent task flow application powered by OpenCode",
+  "scripts": {
+    "dev": "concurrently \"opencode serve --port 4096\" \"npm run dev --prefix web\"",
+    "dev:web": "npm run dev --prefix web",
+    "dev:opencode": "opencode serve --port 4096",
+    "build": "npm run build --prefix web",
+    "start": "concurrently \"opencode serve --port 4096\" \"npm run start --prefix web\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "outputPath": "./output/38aaae27-4a02-43c7-9a6e-aafc1b4356d1/Nubank_Financial_Analysis_Feb2026.xlsx",
+  "sheets": [
+    {
+      "name": "Raw Transactions",
+      "headers": ["Date", "Merchant", "Category", "Amount", "Description", "Type"],
+      "rows": [
+        ["2026-02-01", "Amazon", "Shopping", 189.99, "Electronics purchase", "One-time"],
+        ["2026-02-01", "Payment", "Payment", -3500.00, "Credit card payment", "Payment"],
+        ["2026-02-02", "Mercadinho Sao Luiz", "Groceries", 205.54, "Weekly groceries", "One-time"],
+        ["2026-02-03", "Claude.Ai", "Subscriptions", 114.95, "AI subscription", "Subscription"],
+        ["2026-02-03", "Uber", "Transportation", 27.89, "Ride downtown", "One-time"],
+        ["2026-02-04", "Amazon", "Shopping", 156.78, "Home goods", "Installment"],
+        ["2026-02-05", "Petshop", "Health", 89.45, "Pet supplies", "One-time"],
+        ["2026-02-06", "Netflix", "Entertainment", 45.90, "Streaming", "Subscription"],
+        ["2026-02-07", "Loteriasonlin", "Other", 42.99, "Online lottery", "One-time"],
+        ["2026-02-08", "Google Ads", "Subscriptions", 51.86, "Advertising", "Subscription"],
+        ["2026-02-09", "Spotify", "Entertainment", 40.90, "Music streaming", "Subscription"],
+        ["2026-02-10", "Amazon", "Shopping", 95.67, "Books and media", "One-time"],
+        ["2026-02-11", "Uber Eats", "Food", 67.45, "Dinner delivery", "One-time"],
+        ["2026-02-12", "Farmacia Popular", "Health", 134.67, "Medications", "One-time"],
+        ["2026-02-13", "YouTube Premium", "Entertainment", 53.90, "Video streaming", "Subscription"],
+        ["2026-02-14", "Amazon", "Shopping", 234.56, "Valentines gifts", "Installment"],
+        ["2026-02-15", "NuCel", "Subscriptions", 45.00, "Mobile plan", "Subscription"],
+        ["2026-02-15", "Banco Central", "Financial", 58.99, "Banking fees", "One-time"],
+        ["2026-02-16", "Loteriasonlin", "Other", 43.98, "Online lottery", "One-time"],
+        ["2026-02-17", "Apple", "Subscriptions", 17.90, "iCloud storage", "Subscription"],
+        ["2026-02-18", "Microsoft", "Subscriptions", 12.00, "Office 365", "Subscription"],
+        ["2026-02-19", "Uber", "Transportation", 31.44, "Airport ride", "One-time"],
+        ["2026-02-20", "Amazon", "Shopping", 123.89, "Clothing", "Installment"],
+        ["2026-02-20", "Amazon Refund", "Shopping", -45.67, "Product return", "Refund"],
+        ["2026-02-21", "Cinema", "Entertainment", 82.96, "Movie tickets", "One-time"],
+        ["2026-02-22", "Mercadinho Sao Luiz", "Groceries", 205.54, "Weekly groceries", "One-time"],
+        ["2026-02-23", "Veterinaria", "Health", 87.78, "Pet checkup", "One-time"],
+        ["2026-02-24", "Loteriasonlin", "Other", 41.99, "Online lottery", "One-time"],
+        ["2026-02-25", "Restaurant", "Food", 66.74, "Dinner out", "One-time"],
+        ["2026-02-25", "Uber Refund", "Transportation", -12.30, "Trip refund", "Refund"],
+        ["2026-02-26", "Uber", "Transportation", 22.44, "City ride", "One-time"],
+        ["2026-02-27", "X Premium", "Subscriptions", 14.44, "Social media", "Subscription"],
+        ["2026-02-28", "Apple", "Subscriptions", 17.90, "App purchases", "Subscription"],
+        ["2026-02-28", "Store Credit", "Shopping", -23.45, "Store credit", "Refund"]
+      ]
+    },
+    {
+      "name": "Category Summary",
+      "headers": ["Category", "Total (R$)", "Percentage", "Count", "Average (R$)"],
+      "rows": [
+        ["Shopping", 1576.57, "50.9%", 15, 105.10],
+        ["Groceries", 411.08, "13.3%", 2, 205.54],
+        ["Health", 311.90, "10.1%", 3, 103.97],
+        ["Subscriptions", 283.58, "9.2%", 8, 35.45],
+        ["Entertainment", 223.66, "7.2%", 4, 55.92],
+        ["Food", 134.19, "4.3%", 2, 67.10],
+        ["Transportation", 81.77, "2.6%", 3, 27.26],
+        ["Financial", 58.99, "1.9%", 1, 58.99],
+        ["Other", 15.51, "0.5%", 3, 5.17],
+        ["TOTAL", 3097.25, "100.0%", 41, 75.54]
+      ]
+    }
+  ]
+}

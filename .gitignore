@@ -1,0 +1,8 @@
+node_modules/
+.next/
+.data/
+.opencode/scripts/.tmp-*
+output/
+*.log
+.env
+.env.local
