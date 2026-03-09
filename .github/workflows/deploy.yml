@@ -70,7 +70,7 @@ jobs:
               "git fetch origin",
               "git reset --hard origin/main",
               "docker compose build",
-              "docker compose up -d",
+              "docker compose up -d --force-recreate",
               "docker compose ps",
               "echo DEPLOY_OK"
             ]' \
@@ -129,34 +129,19 @@ jobs:
     needs: deploy
     runs-on: ubuntu-latest
     steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Get public IP
-        id: ip
-        run: |
-          IP=$(aws ec2 describe-instances \
-            --instance-ids "${{ env.INSTANCE_ID }}" \
-            --query "Reservations[0].Instances[0].PublicIpAddress" \
-            --output text)
-          echo "ip=$IP" >> "$GITHUB_OUTPUT"
-          echo "Instance IP: $IP"
-
       - name: Health check
         run: |
+          DOMAIN="${{ secrets.DOMAIN }}"
+          URL="https://${DOMAIN}/login"
           echo "Waiting 15s for containers to stabilize..."
           sleep 15
 
           for i in $(seq 1 6); do
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
               --max-time 10 \
-              "http://${{ steps.ip.outputs.ip }}/login" 2>/dev/null || echo "000")
+              "$URL" 2>/dev/null || echo "000")
 
-            echo "  Attempt $i — HTTP $HTTP_CODE"
+            echo "  Attempt $i — HTTP $HTTP_CODE at $URL"
 
             if [ "$HTTP_CODE" = "200" ]; then
               echo "Health check passed."
