@@ -1,0 +1,17 @@
+node_modules
+web/node_modules
+web/.next
+.next
+.data
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+*.md
+*.log
+output/*
+.opencode
+.vercel
+*.tsbuildinfo
+next-env.d.ts
