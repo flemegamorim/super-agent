@@ -172,8 +172,10 @@ export default function TaskDetailPage({
 
       {task.error && (
         <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/5 p-4">
-          <h3 className="mb-1 text-xs font-medium text-red-400">Error</h3>
-          <p className="text-sm text-red-300">{task.error}</p>
+          <h3 className="mb-2 text-xs font-medium text-red-400">Error</h3>
+          <pre className="max-h-64 overflow-auto whitespace-pre-wrap wrap-break-word rounded-lg bg-red-950/40 p-3 font-mono text-xs leading-relaxed text-red-300">
+            {task.error}
+          </pre>
         </div>
       )}
 

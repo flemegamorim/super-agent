@@ -50,9 +50,60 @@ input/                     # Uploaded input files (per-task subdirectories)
 output/                    # Generated output files (per-task subdirectories)
 ```
 
+## Docker Deployment (EC2)
+
+### Prerequisites
+
+- Docker & Docker Compose on the host
+- A domain pointing to the instance (Route 53 A record → Elastic IP)
+- Ports 80 and 443 open in the EC2 security group
+
+### 1. Configure environment
+
+```bash
+cp .env.example .env
+# Fill in AUTH_SECRET, ANTHROPIC_API_KEY, and:
+#   DOMAIN=superagent.yourdomain.com
+#   NEXTAUTH_URL=https://superagent.yourdomain.com
+```
+
+### 2. Obtain SSL certificate (first time only)
+
+```bash
+chmod +x init-ssl.sh
+./init-ssl.sh superagent.yourdomain.com you@example.com
+```
+
+This spins up a temporary Nginx to complete the Let's Encrypt ACME challenge, stores the certificate in a Docker volume, then starts the full stack with HTTPS.
+
+### 3. Start / restart the stack
+
+```bash
+docker compose up -d --build
+```
+
+### 4. Auto-renew certificates
+
+Add a cron job on the host to renew certificates daily:
+
+```bash
+crontab -e
+# Add:
+0 3 * * * cd /home/ec2-user/super-agent && docker compose run --rm certbot renew --quiet && docker compose exec nginx nginx -s reload
+```
+
+### Useful commands
+
+```bash
+docker compose ps          # Check running containers
+docker compose logs -f     # Follow all logs
+docker compose logs nginx  # Nginx logs only
+docker compose down        # Stop everything
+```
+
 ## Usage
 
-1. Open the dashboard at http://localhost:3000
+1. Open the dashboard at https://superagent.yourdomain.com
 2. Click **New Task** to upload files and provide instructions
 3. Monitor task progress in real-time on the task detail page
 4. Download generated output files when complete

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTask, updateTask } from "@/lib/db";
+import { listOutputFiles } from "@/lib/files";
 import { createSession, sendPrompt } from "@/lib/opencode";
 
 export async function POST(
@@ -20,7 +21,15 @@ export async function POST(
   // Create a new OpenCode session for the re-run
   rerunTask(id, task.title, task.instructions, task.input_files).catch((err) => {
     console.error(`Failed to re-run task ${id}:`, err);
-    updateTask(id, { status: "failed", error: err.message });
+    const hasOutput = listOutputFiles(id).length > 0;
+    if (hasOutput) {
+      updateTask(id, { status: "completed" });
+    } else {
+      const message = err instanceof Error
+        ? [err.message, err.stack].filter(Boolean).join("\n\n")
+        : String(err);
+      updateTask(id, { status: "failed", error: message });
+    }
   });
 
   const updated = updateTask(id, { status: "running", error: null });
@@ -49,7 +58,14 @@ async function rerunTask(
     await sendPrompt(session.id, prompt);
     updateTask(taskId, { status: "completed" });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    updateTask(taskId, { status: "failed", error: message });
+    const hasOutput = listOutputFiles(taskId).length > 0;
+    if (hasOutput) {
+      updateTask(taskId, { status: "completed" });
+    } else {
+      const message = err instanceof Error
+        ? [err.message, err.stack].filter(Boolean).join("\n\n")
+        : "Unknown error";
+      updateTask(taskId, { status: "failed", error: message });
+    }
   }
 }
