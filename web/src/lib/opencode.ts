@@ -1,10 +1,18 @@
 import { createOpencodeClient } from "@opencode-ai/sdk";
 
 const OPENCODE_URL = process.env.OPENCODE_URL || "http://localhost:4096";
+const PROMPT_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
 export function getClient() {
   return createOpencodeClient({
     baseUrl: OPENCODE_URL,
+    fetch: (req: Request) => {
+      return fetch(req, {
+        signal: AbortSignal.timeout(PROMPT_TIMEOUT_MS),
+        // @ts-expect-error undici-specific: disable per-phase timeouts
+        dispatcher: undefined,
+      });
+    },
   });
 }
 
@@ -17,14 +25,31 @@ export async function createSession(title: string) {
 }
 
 export async function sendPrompt(sessionId: string, text: string) {
-  const client = getClient();
-  const result = await client.session.prompt({
-    path: { id: sessionId },
-    body: {
-      parts: [{ type: "text", text }],
-    },
-  });
-  return result.data;
+  const maxRetries = 2;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const client = getClient();
+      const result = await client.session.prompt({
+        path: { id: sessionId },
+        body: {
+          parts: [{ type: "text", text }],
+        },
+      });
+      return result.data;
+    } catch (err) {
+      lastError = err;
+      const isFetchError =
+        err instanceof TypeError && (err.message === "fetch failed" || err.message === "terminated");
+      if (!isFetchError || attempt === maxRetries) throw err;
+      const delay = 2000 * (attempt + 1);
+      console.warn(`sendPrompt attempt ${attempt + 1} failed (fetch error), retrying in ${delay}ms...`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+
+  throw lastError;
 }
 
 export async function abortSession(sessionId: string) {

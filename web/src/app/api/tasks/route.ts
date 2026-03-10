@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { createTask, listTasks, updateTask } from "@/lib/db";
-import { saveUploadedFile } from "@/lib/files";
+import { saveUploadedFile, listOutputFiles } from "@/lib/files";
 import { createSession, sendPrompt } from "@/lib/opencode";
 
 export async function GET() {
@@ -42,7 +42,15 @@ export async function POST(request: NextRequest) {
   // Launch the OpenCode session asynchronously
   launchTask(taskId, title, instructions, savedFiles).catch((err) => {
     console.error(`Failed to launch task ${taskId}:`, err);
-    updateTask(taskId, { status: "failed", error: err.message });
+    const hasOutput = listOutputFiles(taskId).length > 0;
+    if (hasOutput) {
+      updateTask(taskId, { status: "completed" });
+    } else {
+      const message = err instanceof Error
+        ? [err.message, err.stack].filter(Boolean).join("\n\n")
+        : String(err);
+      updateTask(taskId, { status: "failed", error: message });
+    }
   });
 
   return NextResponse.json(task, { status: 201 });
@@ -70,7 +78,14 @@ async function launchTask(
     await sendPrompt(session.id, prompt);
     updateTask(taskId, { status: "completed" });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    updateTask(taskId, { status: "failed", error: message });
+    const hasOutput = listOutputFiles(taskId).length > 0;
+    if (hasOutput) {
+      updateTask(taskId, { status: "completed" });
+    } else {
+      const message = err instanceof Error
+        ? [err.message, err.stack].filter(Boolean).join("\n\n")
+        : "Unknown error";
+      updateTask(taskId, { status: "failed", error: message });
+    }
   }
 }

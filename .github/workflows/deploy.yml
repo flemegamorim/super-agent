@@ -69,9 +69,9 @@ jobs:
               "cd ${{ env.APP_DIR }}",
               "git fetch origin",
               "git reset --hard origin/main",
-              "docker compose build",
-              "docker compose up -d --force-recreate",
-              "docker compose ps",
+              "docker compose -f docker-compose.yml -f docker-compose.prod.yml build",
+              "docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate",
+              "docker compose -f docker-compose.yml -f docker-compose.prod.yml ps",
               "echo DEPLOY_OK"
             ]' \
             --output text \

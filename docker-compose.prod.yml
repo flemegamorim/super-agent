@@ -1,0 +1,21 @@
+services:
+  nginx:
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/templates/default.conf.template:ro
+      - certbot-webroot:/var/www/certbot:ro
+      - certbot-certs:/etc/letsencrypt:ro
+    environment:
+      - NGINX_HOST=${DOMAIN}
+
+  certbot:
+    image: certbot/certbot
+    container_name: super-agent-certbot
+    volumes:
+      - certbot-webroot:/var/www/certbot
+      - certbot-certs:/etc/letsencrypt
+
+volumes:
+  certbot-webroot:
+  certbot-certs:
