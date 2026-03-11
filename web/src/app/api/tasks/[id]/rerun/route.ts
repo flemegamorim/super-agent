@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTask, updateTask } from "@/lib/db";
 import { listOutputFiles } from "@/lib/files";
 import { createSession, sendPrompt } from "@/lib/opencode";
+import { sendTaskNotificationEmail } from "@/lib/email";
 
 export async function POST(
   _request: NextRequest,
@@ -18,7 +19,6 @@ export async function POST(
     return NextResponse.json({ error: "Task is already running" }, { status: 400 });
   }
 
-  // Create a new OpenCode session for the re-run
   rerunTask(id, task.title, task.instructions, task.input_files).catch((err) => {
     console.error(`Failed to re-run task ${id}:`, err);
     const hasOutput = listOutputFiles(id).length > 0;
@@ -30,6 +30,8 @@ export async function POST(
         : String(err);
       updateTask(id, { status: "failed", error: message });
     }
+    const updatedTask = getTask(id);
+    if (updatedTask) sendTaskNotificationEmail(updatedTask);
   });
 
   const updated = updateTask(id, { status: "running", error: null });
@@ -68,4 +70,7 @@ async function rerunTask(
       updateTask(taskId, { status: "failed", error: message });
     }
   }
+
+  const finalTask = getTask(taskId);
+  if (finalTask) await sendTaskNotificationEmail(finalTask);
 }

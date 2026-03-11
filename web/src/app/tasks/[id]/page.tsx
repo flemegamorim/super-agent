@@ -14,6 +14,9 @@ interface Task {
   input_files: string[];
   output_files: string[];
   error: string | null;
+  notification_email: string | null;
+  notify_on_success: boolean;
+  notify_on_error: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -167,6 +170,25 @@ export default function TaskDetailPage({
             Instructions
           </h3>
           <p className="text-sm">{task.instructions}</p>
+        </div>
+      )}
+
+      {task.notification_email && (
+        <div className="mb-6 flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3">
+          <svg className="h-4 w-4 shrink-0 text-indigo-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+          </svg>
+          <div className="text-sm text-zinc-400">
+            <span className="text-zinc-300">{task.notification_email}</span>
+            <span className="ml-2 text-xs text-zinc-600">
+              {[
+                task.notify_on_success && "success",
+                task.notify_on_error && "error",
+              ]
+                .filter(Boolean)
+                .join(" / ")}
+            </span>
+          </div>
         </div>
       )}
 
