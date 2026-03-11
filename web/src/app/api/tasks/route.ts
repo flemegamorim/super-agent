@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import { createTask, listTasks, updateTask } from "@/lib/db";
+import { createTask, getTask, listTasks, updateTask } from "@/lib/db";
 import { saveUploadedFile, listOutputFiles } from "@/lib/files";
 import { createSession, sendPrompt } from "@/lib/opencode";
+import { sendTaskNotificationEmail } from "@/lib/email";
 
 export async function GET() {
   const tasks = listTasks();
@@ -14,6 +15,9 @@ export async function POST(request: NextRequest) {
   const title = formData.get("title") as string;
   const instructions = formData.get("instructions") as string | null;
   const files = formData.getAll("files") as File[];
+  const notificationEmail = formData.get("notification_email") as string | null;
+  const notifyOnSuccess = formData.get("notify_on_success") === "1";
+  const notifyOnError = formData.get("notify_on_error") === "1";
 
   if (!title) {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -37,9 +41,11 @@ export async function POST(request: NextRequest) {
     title,
     instructions: instructions || undefined,
     input_files: savedFiles,
+    notification_email: notificationEmail || undefined,
+    notify_on_success: notifyOnSuccess,
+    notify_on_error: notifyOnError,
   });
 
-  // Launch the OpenCode session asynchronously
   launchTask(taskId, title, instructions, savedFiles).catch((err) => {
     console.error(`Failed to launch task ${taskId}:`, err);
     const hasOutput = listOutputFiles(taskId).length > 0;
@@ -51,6 +57,8 @@ export async function POST(request: NextRequest) {
         : String(err);
       updateTask(taskId, { status: "failed", error: message });
     }
+    const updatedTask = getTask(taskId);
+    if (updatedTask) sendTaskNotificationEmail(updatedTask);
   });
 
   return NextResponse.json(task, { status: 201 });
@@ -88,4 +96,7 @@ async function launchTask(
       updateTask(taskId, { status: "failed", error: message });
     }
   }
+
+  const finalTask = getTask(taskId);
+  if (finalTask) await sendTaskNotificationEmail(finalTask);
 }

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 interface Prompt {
   id: string;
@@ -11,6 +12,7 @@ interface Prompt {
 
 export default function NewTaskPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -19,6 +21,30 @@ export default function NewTaskPage() {
   const [error, setError] = useState<string | null>(null);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [selectedPromptId, setSelectedPromptId] = useState("");
+  const [notificationEmail, setNotificationEmail] = useState("");
+  const [notifyOnSuccess, setNotifyOnSuccess] = useState(true);
+  const [notifyOnError, setNotifyOnError] = useState(true);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/settings/notifications")
+      .then((r) => r.json())
+      .then((prefs) => {
+        if (prefs.default_notification_email) {
+          setNotificationEmail(prefs.default_notification_email);
+          setShowNotifications(true);
+        } else if (session?.user?.email) {
+          setNotificationEmail(session.user.email);
+        }
+        setNotifyOnSuccess(prefs.default_notify_on_success ?? true);
+        setNotifyOnError(prefs.default_notify_on_error ?? true);
+      })
+      .catch(() => {
+        if (session?.user?.email) {
+          setNotificationEmail(session.user.email);
+        }
+      });
+  }, [session?.user?.email]);
 
   useEffect(() => {
     fetch("/api/prompts")
@@ -62,6 +88,11 @@ export default function NewTaskPage() {
     formData.append("title", title);
     if (instructions.trim()) formData.append("instructions", instructions);
     files.forEach((f) => formData.append("files", f));
+    if (showNotifications && notificationEmail.trim()) {
+      formData.append("notification_email", notificationEmail.trim());
+      formData.append("notify_on_success", notifyOnSuccess ? "1" : "0");
+      formData.append("notify_on_error", notifyOnError ? "1" : "0");
+    }
 
     try {
       const res = await fetch("/api/tasks", { method: "POST", body: formData });
@@ -194,6 +225,56 @@ export default function NewTaskPage() {
           )}
         </div>
 
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowNotifications((v) => !v)}
+            className="flex items-center gap-2 text-sm font-medium text-zinc-400 transition-colors hover:text-white"
+          >
+            <MailIcon className="h-4 w-4" />
+            Email Notifications
+            <ChevronIcon className={`h-4 w-4 transition-transform ${showNotifications ? "rotate-180" : ""}`} />
+          </button>
+
+          {showNotifications && (
+            <div className="mt-3 space-y-4 rounded-lg border border-zinc-700 bg-zinc-800/50 p-4">
+              <div>
+                <label htmlFor="notification_email" className="block text-sm font-medium text-zinc-300">
+                  Recipient Email
+                </label>
+                <input
+                  id="notification_email"
+                  type="email"
+                  value={notificationEmail}
+                  onChange={(e) => setNotificationEmail(e.target.value)}
+                  placeholder="you@company.com"
+                  className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition-colors focus:border-indigo-500"
+                />
+              </div>
+              <div className="flex gap-6">
+                <label className="flex items-center gap-2 text-sm text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={notifyOnSuccess}
+                    onChange={(e) => setNotifyOnSuccess(e.target.checked)}
+                    className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0"
+                  />
+                  On success
+                </label>
+                <label className="flex items-center gap-2 text-sm text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={notifyOnError}
+                    onChange={(e) => setNotifyOnError(e.target.checked)}
+                    className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0"
+                  />
+                  On error
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+
         {error && (
           <div className="rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400">
             {error}
@@ -232,6 +313,22 @@ function XIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+    </svg>
+  );
+}
+
+function MailIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
     </svg>
   );
 }

@@ -50,15 +50,42 @@ input/                     # Uploaded input files (per-task subdirectories)
 output/                    # Generated output files (per-task subdirectories)
 ```
 
-## Docker Deployment (EC2)
+## Docker
 
-### Prerequisites
+### Local (HTTP only)
+
+For local development with Docker, the base `docker-compose.yml` is all you need. It runs Nginx on port 80 with plain HTTP via `nginx.local.conf`.
+
+```bash
+docker compose up -d --build
+```
+
+Then open http://localhost.
+
+### Production Deployment (EC2 with HTTPS)
+
+`docker-compose.prod.yml` is a Compose **override file** — it layers production-specific configuration on top of the base `docker-compose.yml`:
+
+| Base (`docker-compose.yml`) | Prod override (`docker-compose.prod.yml`) |
+|---|---|
+| Nginx on port **80** only | Adds port **443** for HTTPS |
+| Uses `nginx.local.conf` (plain HTTP proxy) | Swaps to `nginx.conf` (HTTP→HTTPS redirect + SSL termination) |
+| No SSL | Mounts **certbot** volumes for Let's Encrypt certs |
+| — | Adds a **certbot** service for certificate management |
+
+You must pass both files explicitly to every `docker compose` command:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml <command>
+```
+
+#### Prerequisites
 
 - Docker & Docker Compose on the host
 - A domain pointing to the instance (Route 53 A record → Elastic IP)
 - Ports 80 and 443 open in the EC2 security group
 
-### 1. Configure environment
+#### 1. Configure environment
 
 ```bash
 cp .env.example .env
@@ -67,7 +94,7 @@ cp .env.example .env
 #   NEXTAUTH_URL=https://superagent.yourdomain.com
 ```
 
-### 2. Obtain SSL certificate (first time only)
+#### 2. Obtain SSL certificate (first time only)
 
 ```bash
 chmod +x init-ssl.sh
@@ -76,29 +103,29 @@ chmod +x init-ssl.sh
 
 This spins up a temporary Nginx to complete the Let's Encrypt ACME challenge, stores the certificate in a Docker volume, then starts the full stack with HTTPS.
 
-### 3. Start / restart the stack
+#### 3. Start / restart the stack
 
 ```bash
-docker compose up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
-### 4. Auto-renew certificates
+#### 4. Auto-renew certificates
 
 Add a cron job on the host to renew certificates daily:
 
 ```bash
 crontab -e
 # Add:
-0 3 * * * cd /home/ec2-user/super-agent && docker compose run --rm certbot renew --quiet && docker compose exec nginx nginx -s reload
+0 3 * * * cd /home/ec2-user/super-agent && docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm certbot renew --quiet && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec nginx nginx -s reload
 ```
 
-### Useful commands
+#### Useful commands
 
 ```bash
-docker compose ps          # Check running containers
-docker compose logs -f     # Follow all logs
-docker compose logs nginx  # Nginx logs only
-docker compose down        # Stop everything
+docker compose -f docker-compose.yml -f docker-compose.prod.yml ps          # Check running containers
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f     # Follow all logs
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs nginx  # Nginx logs only
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down        # Stop everything
 ```
 
 ## Usage

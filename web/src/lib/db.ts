@@ -35,6 +35,18 @@ function getDb(): Database.Database {
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       )
     `);
+    const taskColumns = _db.prepare(`PRAGMA table_info(tasks)`).all() as { name: string }[];
+    const colNames = new Set(taskColumns.map((c) => c.name));
+    if (!colNames.has("notification_email")) {
+      _db.exec(`ALTER TABLE tasks ADD COLUMN notification_email TEXT`);
+    }
+    if (!colNames.has("notify_on_success")) {
+      _db.exec(`ALTER TABLE tasks ADD COLUMN notify_on_success INTEGER NOT NULL DEFAULT 0`);
+    }
+    if (!colNames.has("notify_on_error")) {
+      _db.exec(`ALTER TABLE tasks ADD COLUMN notify_on_error INTEGER NOT NULL DEFAULT 0`);
+    }
+
     _db.exec(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
@@ -45,6 +57,18 @@ function getDb(): Database.Database {
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       )
     `);
+
+    const userColumns = _db.prepare(`PRAGMA table_info(users)`).all() as { name: string }[];
+    const userColNames = new Set(userColumns.map((c) => c.name));
+    if (!userColNames.has("default_notification_email")) {
+      _db.exec(`ALTER TABLE users ADD COLUMN default_notification_email TEXT`);
+    }
+    if (!userColNames.has("default_notify_on_success")) {
+      _db.exec(`ALTER TABLE users ADD COLUMN default_notify_on_success INTEGER NOT NULL DEFAULT 0`);
+    }
+    if (!userColNames.has("default_notify_on_error")) {
+      _db.exec(`ALTER TABLE users ADD COLUMN default_notify_on_error INTEGER NOT NULL DEFAULT 0`);
+    }
   }
   return _db;
 }
@@ -58,6 +82,9 @@ export interface Task {
   input_files: string[];
   output_files: string[];
   error: string | null;
+  notification_email: string | null;
+  notify_on_success: boolean;
+  notify_on_error: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -71,6 +98,9 @@ interface TaskRow {
   input_files: string;
   output_files: string;
   error: string | null;
+  notification_email: string | null;
+  notify_on_success: number;
+  notify_on_error: number;
   created_at: string;
   updated_at: string;
 }
@@ -81,6 +111,8 @@ function rowToTask(row: TaskRow): Task {
     status: row.status as Task["status"],
     input_files: JSON.parse(row.input_files),
     output_files: JSON.parse(row.output_files),
+    notify_on_success: !!row.notify_on_success,
+    notify_on_error: !!row.notify_on_error,
   };
 }
 
@@ -89,11 +121,22 @@ export function createTask(task: {
   title: string;
   instructions?: string;
   input_files: string[];
+  notification_email?: string;
+  notify_on_success?: boolean;
+  notify_on_error?: boolean;
 }): Task {
   const db = getDb();
   db.prepare(
-    `INSERT INTO tasks (id, title, instructions, input_files) VALUES (?, ?, ?, ?)`,
-  ).run(task.id, task.title, task.instructions ?? null, JSON.stringify(task.input_files));
+    `INSERT INTO tasks (id, title, instructions, input_files, notification_email, notify_on_success, notify_on_error) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    task.id,
+    task.title,
+    task.instructions ?? null,
+    JSON.stringify(task.input_files),
+    task.notification_email ?? null,
+    task.notify_on_success ? 1 : 0,
+    task.notify_on_error ? 1 : 0,
+  );
   return getTask(task.id)!;
 }
 
@@ -215,8 +258,17 @@ export interface User {
   name: string;
   email: string;
   password_hash: string;
-  must_change_password: number; // 1 = true, 0 = false (SQLite boolean)
+  must_change_password: number;
+  default_notification_email: string | null;
+  default_notify_on_success: number;
+  default_notify_on_error: number;
   created_at: string;
+}
+
+export interface UserNotificationPrefs {
+  default_notification_email: string | null;
+  default_notify_on_success: boolean;
+  default_notify_on_error: boolean;
 }
 
 export function createUser(user: {
@@ -256,4 +308,32 @@ export function listUsers(): Omit<User, "password_hash">[] {
   return db.prepare(
     `SELECT id, name, email, must_change_password, created_at FROM users ORDER BY name ASC`,
   ).all() as Omit<User, "password_hash">[];
+}
+
+export function getUserNotificationPrefs(userId: string): UserNotificationPrefs | null {
+  const db = getDb();
+  const row = db.prepare(
+    `SELECT default_notification_email, default_notify_on_success, default_notify_on_error FROM users WHERE id = ?`,
+  ).get(userId) as { default_notification_email: string | null; default_notify_on_success: number; default_notify_on_error: number } | undefined;
+  if (!row) return null;
+  return {
+    default_notification_email: row.default_notification_email,
+    default_notify_on_success: !!row.default_notify_on_success,
+    default_notify_on_error: !!row.default_notify_on_error,
+  };
+}
+
+export function updateUserNotificationPrefs(
+  userId: string,
+  prefs: UserNotificationPrefs,
+): void {
+  const db = getDb();
+  db.prepare(
+    `UPDATE users SET default_notification_email = ?, default_notify_on_success = ?, default_notify_on_error = ? WHERE id = ?`,
+  ).run(
+    prefs.default_notification_email,
+    prefs.default_notify_on_success ? 1 : 0,
+    prefs.default_notify_on_error ? 1 : 0,
+    userId,
+  );
 }

@@ -1,0 +1,155 @@
+"use client";
+
+import { useState, useEffect } from "react";
+
+interface NotificationPrefs {
+  default_notification_email: string | null;
+  default_notify_on_success: boolean;
+  default_notify_on_error: boolean;
+}
+
+export default function SettingsPage() {
+  const [email, setEmail] = useState("");
+  const [notifyOnSuccess, setNotifyOnSuccess] = useState(false);
+  const [notifyOnError, setNotifyOnError] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/settings/notifications")
+      .then((r) => r.json())
+      .then((data: NotificationPrefs) => {
+        setEmail(data.default_notification_email ?? "");
+        setNotifyOnSuccess(data.default_notify_on_success);
+        setNotifyOnError(data.default_notify_on_error);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaved(false);
+    try {
+      const res = await fetch("/api/settings/notifications", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          default_notification_email: email,
+          default_notify_on_success: notifyOnSuccess,
+          default_notify_on_error: notifyOnError,
+        }),
+      });
+      if (res.ok) setSaved(true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+        Loading...
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-2xl p-8">
+      <h1 className="text-2xl font-bold">Settings</h1>
+      <p className="mt-1 text-sm text-zinc-400">
+        Configure default notification preferences for new tasks
+      </p>
+
+      <div className="mt-8 space-y-6">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+          <div className="flex items-center gap-3">
+            <MailIcon className="h-5 w-5 text-indigo-400" />
+            <h2 className="text-lg font-semibold">Email Notifications</h2>
+          </div>
+          <p className="mt-1 text-sm text-zinc-500">
+            These defaults will be pre-filled when creating new tasks. You can
+            still override them per task.
+          </p>
+
+          <div className="mt-6 space-y-5">
+            <div>
+              <label
+                htmlFor="default_email"
+                className="block text-sm font-medium text-zinc-300"
+              >
+                Default Recipient Email
+              </label>
+              <input
+                id="default_email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none transition-colors focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-zinc-300">
+                Notify me when a task finishes with:
+              </p>
+              <label className="flex items-center gap-3 text-sm text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={notifyOnSuccess}
+                  onChange={(e) => setNotifyOnSuccess(e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0"
+                />
+                Success
+              </label>
+              <label className="flex items-center gap-3 text-sm text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={notifyOnError}
+                  onChange={(e) => setNotifyOnError(e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0"
+                />
+                Error
+              </label>
+            </div>
+          </div>
+
+          <div className="mt-6 flex items-center gap-3">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save Settings"}
+            </button>
+            {saved && (
+              <span className="text-sm text-emerald-400">
+                Settings saved
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MailIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.5}
+      stroke="currentColor"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75"
+      />
+    </svg>
+  );
+}
