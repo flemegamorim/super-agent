@@ -127,6 +127,7 @@ If you see an error like `network <hash> not found` when starting containers, it
 docker compose -f docker-compose.yml -f docker-compose.prod.yml down --remove-orphans
 docker network prune -f
 docker compose -f docker-compose.yml -f docker-compose.prod.yml --ansi never up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down --remove-orphans && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
 #### Useful commands

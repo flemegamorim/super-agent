@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getTask } from "@/lib/db";
 
-const OPENCODE_URL = process.env.OPENCODE_URL || "http://localhost:4096";
+const OPENCODE_URL = process.env.OPENCODE_URL || "http://127.0.0.1:4096";
 
 export async function GET(
   _request: NextRequest,

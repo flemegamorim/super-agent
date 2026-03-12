@@ -1,6 +1,6 @@
 import { createOpencodeClient } from "@opencode-ai/sdk";
 
-const OPENCODE_URL = process.env.OPENCODE_URL || "http://localhost:4096";
+const OPENCODE_URL = process.env.OPENCODE_URL || "http://127.0.0.1:4096";
 const PROMPT_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
 export function getClient() {
