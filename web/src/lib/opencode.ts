@@ -6,11 +6,10 @@ const PROMPT_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 export function getClient() {
   return createOpencodeClient({
     baseUrl: OPENCODE_URL,
+    throwOnError: true,
     fetch: (req: Request) => {
       return fetch(req, {
         signal: AbortSignal.timeout(PROMPT_TIMEOUT_MS),
-        // @ts-expect-error undici-specific: disable per-phase timeouts
-        dispatcher: undefined,
       });
     },
   });

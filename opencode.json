@@ -7,8 +7,8 @@
   },
   "server": {
     "port": 4096,
-    "hostname": "127.0.0.1",
-    "cors": ["http://localhost:3000"]
+    "hostname": "0.0.0.0",
+    "cors": ["*"]
   },
   "agent": {
     "build": {
