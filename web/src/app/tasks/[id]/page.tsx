@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, use } from "react";
+import { useEffect, useState, useRef, useMemo, use } from "react";
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDistanceToNow } from "date-fns";
@@ -32,6 +32,108 @@ interface SSEEvent {
   timestamp?: string;
 }
 
+interface ActivityItem {
+  key: string;
+  kind: "status" | "message" | "diff" | "info";
+  label: string;
+  body?: string;
+}
+
+function buildActivityItems(events: SSEEvent[]): ActivityItem[] {
+  const items: ActivityItem[] = [];
+  const partTexts = new Map<string, string>();
+  const partItemIdx = new Map<string, number>();
+  let lastStatus = "";
+  let statusCount = 0;
+
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    const props = (event.properties ?? {}) as Record<string, unknown>;
+
+    switch (event.type) {
+      case "session.status": {
+        const status = (props.status as { type?: string })?.type ?? "unknown";
+        if (status === lastStatus) {
+          statusCount++;
+          const prev = items[items.length - 1];
+          if (prev?.kind === "status") {
+            prev.label =
+              status === "busy"
+                ? `Agent is working... (${statusCount})`
+                : `Agent is idle (${statusCount})`;
+          }
+          break;
+        }
+        lastStatus = status;
+        statusCount = 1;
+        items.push({
+          key: `status-${i}`,
+          kind: "status",
+          label:
+            status === "busy"
+              ? "Agent is working..."
+              : status === "idle"
+                ? "Agent is idle"
+                : `Status: ${status}`,
+        });
+        break;
+      }
+
+      case "message.part.delta": {
+        const partID = props.partID as string;
+        const delta = (props.delta as string) ?? "";
+        const field = (props.field as string) ?? "text";
+        if (!partID || field !== "text") break;
+
+        const accumulated = (partTexts.get(partID) ?? "") + delta;
+        partTexts.set(partID, accumulated);
+
+        const existingIdx = partItemIdx.get(partID);
+        if (existingIdx !== undefined) {
+          items[existingIdx] = {
+            ...items[existingIdx],
+            body: accumulated,
+          };
+        } else {
+          partItemIdx.set(partID, items.length);
+          items.push({
+            key: `msg-${partID}`,
+            kind: "message",
+            label: "Agent",
+            body: accumulated,
+          });
+        }
+        break;
+      }
+
+      case "session.diff": {
+        const diff = props.diff as { path?: string }[] | undefined;
+        if (!diff || diff.length === 0) break;
+        items.push({
+          key: `diff-${i}`,
+          kind: "diff",
+          label: `Files modified`,
+          body: diff.map((d) => d.path ?? "unknown").join(", "),
+        });
+        break;
+      }
+
+      default: {
+        items.push({
+          key: `evt-${i}`,
+          kind: "info",
+          label: event.type,
+          body: props
+            ? JSON.stringify(props, null, 0).slice(0, 200)
+            : undefined,
+        });
+      }
+    }
+  }
+
+  return items;
+}
+
 export default function TaskDetailPage({
   params,
 }: {
@@ -43,6 +145,7 @@ export default function TaskDetailPage({
   const [events, setEvents] = useState<SSEEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const eventsEndRef = useRef<HTMLDivElement>(null);
+  const activityItems = useMemo(() => buildActivityItems(events), [events]);
 
   useEffect(() => {
     fetchTask();
@@ -251,25 +354,72 @@ export default function TaskDetailPage({
         <div className="border-b border-zinc-800 px-4 py-3">
           <h3 className="text-sm font-semibold">Activity Log</h3>
         </div>
-        <div className="max-h-80 overflow-auto p-4">
-          {events.length === 0 ? (
+        <div className="max-h-128 overflow-auto p-4">
+          {activityItems.length === 0 ? (
             <p className="text-sm text-zinc-500">
               {task.status === "running"
                 ? "Waiting for events..."
                 : "No events recorded"}
             </p>
           ) : (
-            <div className="space-y-1.5 font-mono text-xs">
-              {events.map((event, i) => (
-                <div key={i} className="text-zinc-400">
-                  <span className="text-zinc-600">
-                    [{event.type}]
-                  </span>{" "}
-                  {event.properties
-                    ? JSON.stringify(event.properties).slice(0, 200)
-                    : ""}
-                </div>
-              ))}
+            <div className="space-y-3 text-sm">
+              {activityItems.map((item) => {
+                if (item.kind === "status") {
+                  return (
+                    <div
+                      key={item.key}
+                      className="flex items-center gap-2 text-xs text-zinc-500"
+                    >
+                      <span
+                        className={`inline-block h-1.5 w-1.5 rounded-full ${
+                          item.label.includes("working")
+                            ? "animate-pulse bg-amber-400"
+                            : "bg-zinc-600"
+                        }`}
+                      />
+                      {item.label}
+                    </div>
+                  );
+                }
+
+                if (item.kind === "message") {
+                  return (
+                    <div
+                      key={item.key}
+                      className="rounded-lg border border-zinc-800 bg-zinc-950 p-3"
+                    >
+                      <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-indigo-400">
+                        {item.label}
+                      </p>
+                      <div className="whitespace-pre-wrap text-xs leading-relaxed text-zinc-300">
+                        {item.body}
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (item.kind === "diff") {
+                  return (
+                    <div
+                      key={item.key}
+                      className="flex items-start gap-2 text-xs text-emerald-400"
+                    >
+                      <span className="mt-0.5 shrink-0">&#9998;</span>
+                      <span>
+                        <span className="font-medium">{item.label}:</span>{" "}
+                        <span className="text-zinc-400">{item.body}</span>
+                      </span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={item.key} className="text-xs text-zinc-500">
+                    <span className="text-zinc-600">[{item.label}]</span>{" "}
+                    <span className="text-zinc-500">{item.body}</span>
+                  </div>
+                );
+              })}
               <div ref={eventsEndRef} />
             </div>
           )}

@@ -23,7 +23,7 @@ build/
 *.pem
 .data/
 .opencode/scripts/.tmp-*
-output/
+/output/
 
 # debug
 *.log
@@ -39,5 +39,5 @@ output/
 next-env.d.ts
 
 # input and output files
-input/
-output/
+/input/
+/output/
