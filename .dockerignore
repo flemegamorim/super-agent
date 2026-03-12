@@ -11,7 +11,7 @@ web/.next
 *.md
 *.log
 output/*
-.opencode
+!.opencode
 .vercel
 *.tsbuildinfo
 next-env.d.ts

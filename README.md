@@ -106,7 +106,7 @@ This spins up a temporary Nginx to complete the Let's Encrypt ACME challenge, st
 #### 3. Start / restart the stack
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml --ansi never up -d --build
 ```
 
 #### 4. Auto-renew certificates
@@ -117,6 +117,16 @@ Add a cron job on the host to renew certificates daily:
 crontab -e
 # Add:
 0 3 * * * cd /home/ec2-user/super-agent && docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm certbot renew --quiet && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec nginx nginx -s reload
+```
+
+#### Troubleshooting: stale Docker network
+
+If you see an error like `network <hash> not found` when starting containers, it means Docker has orphaned network references from a previous run. Clean up and rebuild:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down --remove-orphans
+docker network prune -f
+docker compose -f docker-compose.yml -f docker-compose.prod.yml --ansi never up -d --build
 ```
 
 #### Useful commands

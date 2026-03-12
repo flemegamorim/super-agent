@@ -43,6 +43,7 @@ ENV PATH="/root/.opencode/bin:/root/.local/bin:${PATH}"
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY opencode.json ./
+COPY .opencode/ ./.opencode/
 COPY prompts/ ./prompts/
 
 # Next.js production build
