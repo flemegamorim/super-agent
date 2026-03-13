@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     notify_on_error: notifyOnError,
   });
 
-  launchTask(taskId, title, instructions, savedFiles).catch((err) => {
+  launchTask(taskId, title, instructions, savedFiles).catch(async (err) => {
     console.error(`Failed to launch task ${taskId}:`, err);
     const hasOutput = listOutputFiles(taskId).length > 0;
     if (hasOutput) {
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       updateTask(taskId, { status: "failed", error: message });
     }
     const updatedTask = getTask(taskId);
-    if (updatedTask) sendTaskNotificationEmail(updatedTask);
+    if (updatedTask) await sendTaskNotificationEmail(updatedTask);
   });
 
   return NextResponse.json(task, { status: 201 });

@@ -19,7 +19,7 @@ export async function POST(
     return NextResponse.json({ error: "Task is already running" }, { status: 400 });
   }
 
-  rerunTask(id, task.title, task.instructions, task.input_files).catch((err) => {
+  rerunTask(id, task.title, task.instructions, task.input_files).catch(async (err) => {
     console.error(`Failed to re-run task ${id}:`, err);
     const hasOutput = listOutputFiles(id).length > 0;
     if (hasOutput) {
@@ -31,7 +31,7 @@ export async function POST(
       updateTask(id, { status: "failed", error: message });
     }
     const updatedTask = getTask(id);
-    if (updatedTask) sendTaskNotificationEmail(updatedTask);
+    if (updatedTask) await sendTaskNotificationEmail(updatedTask);
   });
 
   const updated = updateTask(id, { status: "running", error: null });

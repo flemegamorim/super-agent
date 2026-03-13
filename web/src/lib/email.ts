@@ -80,6 +80,10 @@ export async function sendEmail(options: SendEmailOptions): Promise<void> {
     return;
   }
 
+  console.log(
+    `Sending email to ${options.recipient} | subject: ${options.subject} | attachment: ${options.attachment?.filename ?? "none"}`,
+  );
+
   const response = await fetch(BRAIN_GATEWAY_URL, {
     method: "POST",
     headers: {
@@ -89,12 +93,15 @@ export async function sendEmail(options: SendEmailOptions): Promise<void> {
     body: JSON.stringify(options),
   });
 
+  const responseText = await response.text().catch(() => "");
+
   if (!response.ok) {
-    const text = await response.text().catch(() => "");
     throw new Error(
-      `Email send failed (${response.status}): ${text}`,
+      `Email send failed (${response.status}): ${responseText}`,
     );
   }
+
+  console.log(`Brain Gateway response (${response.status}): ${responseText}`);
 }
 
 function buildEmailBody(task: Task): string {
