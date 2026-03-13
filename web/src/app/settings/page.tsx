@@ -8,6 +8,16 @@ interface NotificationPrefs {
   default_notify_on_error: boolean;
 }
 
+interface AvailableModel {
+  id: string;
+  name: string;
+}
+
+interface ModelSettings {
+  model: string;
+  available_models: AvailableModel[];
+}
+
 export default function SettingsPage() {
   const [email, setEmail] = useState("");
   const [notifyOnSuccess, setNotifyOnSuccess] = useState(false);
@@ -16,13 +26,22 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const [model, setModel] = useState("");
+  const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
+  const [savingModel, setSavingModel] = useState(false);
+  const [modelSaved, setModelSaved] = useState(false);
+
   useEffect(() => {
-    fetch("/api/settings/notifications")
-      .then((r) => r.json())
-      .then((data: NotificationPrefs) => {
-        setEmail(data.default_notification_email ?? "");
-        setNotifyOnSuccess(data.default_notify_on_success);
-        setNotifyOnError(data.default_notify_on_error);
+    Promise.all([
+      fetch("/api/settings/notifications").then((r) => r.json()),
+      fetch("/api/settings/model").then((r) => r.json()),
+    ])
+      .then(([notifData, modelData]: [NotificationPrefs, ModelSettings]) => {
+        setEmail(notifData.default_notification_email ?? "");
+        setNotifyOnSuccess(notifData.default_notify_on_success);
+        setNotifyOnError(notifData.default_notify_on_error);
+        setModel(modelData.model ?? "");
+        setAvailableModels(modelData.available_models ?? []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -47,6 +66,21 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleSaveModel() {
+    setSavingModel(true);
+    setModelSaved(false);
+    try {
+      const res = await fetch("/api/settings/model", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model }),
+      });
+      if (res.ok) setModelSaved(true);
+    } finally {
+      setSavingModel(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-zinc-500">
@@ -59,10 +93,58 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-2xl p-8">
       <h1 className="text-2xl font-bold">Settings</h1>
       <p className="mt-1 text-sm text-zinc-400">
-        Configure default notification preferences for new tasks
+        Configure AI model and notification preferences
       </p>
 
       <div className="mt-8 space-y-6">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+          <div className="flex items-center gap-3">
+            <BrainIcon className="h-5 w-5 text-indigo-400" />
+            <h2 className="text-lg font-semibold">AI Model</h2>
+          </div>
+          <p className="mt-1 text-sm text-zinc-500">
+            Select the Anthropic model used by the AI agent for processing
+            tasks.
+          </p>
+
+          <div className="mt-6">
+            <label
+              htmlFor="model_select"
+              className="block text-sm font-medium text-zinc-300"
+            >
+              Model
+            </label>
+            <select
+              id="model_select"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-indigo-500"
+            >
+              {availableModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs text-zinc-500">
+              {model}
+            </p>
+          </div>
+
+          <div className="mt-6 flex items-center gap-3">
+            <button
+              onClick={handleSaveModel}
+              disabled={savingModel}
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {savingModel ? "Saving..." : "Save Model"}
+            </button>
+            {modelSaved && (
+              <span className="text-sm text-emerald-400">Model saved</span>
+            )}
+          </div>
+        </div>
+
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
           <div className="flex items-center gap-3">
             <MailIcon className="h-5 w-5 text-indigo-400" />
@@ -133,6 +215,24 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function BrainIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.5}
+      stroke="currentColor"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z"
+      />
+    </svg>
   );
 }
 
