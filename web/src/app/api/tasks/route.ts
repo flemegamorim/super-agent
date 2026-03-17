@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import { createTask, getTask, listTasks, updateTask } from "@/lib/db";
+import { createTask, getTask, listTasks, updateTask, getActiveSystemPrompt } from "@/lib/db";
 import { listOutputFiles } from "@/lib/files";
 import { createSession, sendPrompt } from "@/lib/opencode";
 import { sendTaskNotificationEmail } from "@/lib/email";
@@ -81,8 +81,10 @@ async function launchTask(
   if (!session) throw new Error("Failed to create OpenCode session");
   updateTask(taskId, { session_id: session.id, status: "running" });
 
+  const systemPrompt = getActiveSystemPrompt();
   const fileList = files.map((f) => `- ${f}`).join("\n");
   const prompt = [
+    systemPrompt ? `${systemPrompt}\n\n---\n\n` : "",
     `Process the following input files:\n${fileList}`,
     instructions ? `\nAdditional instructions: ${instructions}` : "",
     `\nWrite all output files to the ./output/${taskId}/ directory.`,

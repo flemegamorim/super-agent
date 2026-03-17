@@ -69,6 +69,9 @@ function getDb(): Database.Database {
     if (!userColNames.has("default_notify_on_error")) {
       _db.exec(`ALTER TABLE users ADD COLUMN default_notify_on_error INTEGER NOT NULL DEFAULT 0`);
     }
+    if (!userColNames.has("system_prompt")) {
+      _db.exec(`ALTER TABLE users ADD COLUMN system_prompt TEXT`);
+    }
   }
   return _db;
 }
@@ -262,6 +265,7 @@ export interface User {
   default_notification_email: string | null;
   default_notify_on_success: number;
   default_notify_on_error: number;
+  system_prompt: string | null;
   created_at: string;
 }
 
@@ -336,4 +340,25 @@ export function updateUserNotificationPrefs(
     prefs.default_notify_on_error ? 1 : 0,
     userId,
   );
+}
+
+export function getSystemPrompt(userId: string): string | null {
+  const db = getDb();
+  const row = db.prepare(
+    `SELECT system_prompt FROM users WHERE id = ?`,
+  ).get(userId) as { system_prompt: string | null } | undefined;
+  return row?.system_prompt ?? null;
+}
+
+export function updateSystemPrompt(userId: string, prompt: string | null): void {
+  const db = getDb();
+  db.prepare(`UPDATE users SET system_prompt = ? WHERE id = ?`).run(prompt, userId);
+}
+
+export function getActiveSystemPrompt(): string | null {
+  const db = getDb();
+  const row = db.prepare(
+    `SELECT system_prompt FROM users WHERE system_prompt IS NOT NULL AND system_prompt != '' LIMIT 1`,
+  ).get() as { system_prompt: string | null } | undefined;
+  return row?.system_prompt ?? null;
 }
