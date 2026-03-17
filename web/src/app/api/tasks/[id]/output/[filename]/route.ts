@@ -6,6 +6,7 @@ import path from "path";
 
 const MIME_TYPES: Record<string, string> = {
   ".pdf": "application/pdf",
+  ".xlsm": "application/vnd.ms-excel.sheet.macroEnabled.12",
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ".xls": "application/vnd.ms-excel",
   ".csv": "text/csv",

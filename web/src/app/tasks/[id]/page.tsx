@@ -311,7 +311,7 @@ export default function TaskDetailPage({
           </div>
           <ul className="divide-y divide-zinc-800">
             {task.input_files.map((f, i) => (
-              <li key={i} className="px-4 py-2.5 text-sm text-zinc-300">
+              <li key={i} className="truncate px-4 py-2.5 text-sm text-zinc-300" title={f.split(/[\\/]/).pop()}>
                 {f.split(/[\\/]/).pop()}
               </li>
             ))}
@@ -333,9 +333,9 @@ export default function TaskDetailPage({
               {outputs.map((f) => (
                 <li
                   key={f.name}
-                  className="flex items-center justify-between px-4 py-2.5"
+                  className="flex items-center justify-between gap-3 px-4 py-2.5"
                 >
-                  <span className="text-sm text-zinc-300">{f.name}</span>
+                  <span className="min-w-0 truncate text-sm text-zinc-300" title={f.name}>{f.name}</span>
                   <a
                     href={f.downloadUrl}
                     download

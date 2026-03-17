@@ -64,7 +64,10 @@ export function Sidebar() {
               </p>
             </div>
             <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={async () => {
+                await signOut({ redirect: false });
+                window.location.href = "/login";
+              }}
               className="ml-2 shrink-0 text-xs text-zinc-500 hover:text-red-400"
               title="Sign out"
             >

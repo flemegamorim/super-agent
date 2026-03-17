@@ -97,8 +97,17 @@ export default function NewTaskPage() {
     try {
       const res = await fetch("/api/tasks", { method: "POST", body: formData });
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to create task");
+        let message = `Server error (${res.status})`;
+        try {
+          const data = await res.json();
+          message = data.error || message;
+        } catch {
+          const text = await res.text().catch(() => "");
+          if (res.status === 413 || text.includes("Too Large")) {
+            message = "Upload too large. Maximum total size is 50 MB.";
+          }
+        }
+        throw new Error(message);
       }
       const task = await res.json();
       router.push(`/tasks/${task.id}`);
@@ -108,7 +117,7 @@ export default function NewTaskPage() {
     }
   }
 
-  const ACCEPTED_TYPES = ".pdf,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tiff,.csv,.json,.txt";
+  const ACCEPTED_TYPES = ".pdf,.xlsx,.xls,.xlsm,.png,.jpg,.jpeg,.gif,.webp,.csv,.json,.txt";
 
   return (
     <div className="mx-auto max-w-2xl p-8">
@@ -205,10 +214,10 @@ export default function NewTaskPage() {
                   key={`${file.name}-${i}`}
                   className="flex items-center justify-between rounded-lg bg-zinc-800 px-3 py-2 text-sm"
                 >
-                  <div className="flex items-center gap-2">
-                    <FileIcon className="h-4 w-4 text-zinc-400" />
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <FileIcon className="h-4 w-4 shrink-0 text-zinc-400" />
                     <span className="truncate">{file.name}</span>
-                    <span className="text-xs text-zinc-500">
+                    <span className="shrink-0 text-xs text-zinc-500">
                       ({(file.size / 1024).toFixed(1)} KB)
                     </span>
                   </div>
