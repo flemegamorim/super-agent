@@ -1,13 +1,22 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { v4 as uuidv4 } from "uuid";
 
 interface Prompt {
   id: string;
   name: string;
   body: string;
+}
+
+interface FileProgress {
+  name: string;
+  size: number;
+  loaded: number;
+  status: "pending" | "uploading" | "done" | "error";
+  error?: string;
 }
 
 export default function NewTaskPage() {
@@ -18,6 +27,10 @@ export default function NewTaskPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<
+    "idle" | "uploading" | "creating"
+  >("idle");
+  const [fileProgress, setFileProgress] = useState<FileProgress[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [selectedPromptId, setSelectedPromptId] = useState("");
@@ -25,6 +38,7 @@ export default function NewTaskPage() {
   const [notifyOnSuccess, setNotifyOnSuccess] = useState(true);
   const [notifyOnError, setNotifyOnError] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     fetch("/api/settings/notifications")
@@ -49,7 +63,9 @@ export default function NewTaskPage() {
   useEffect(() => {
     fetch("/api/prompts")
       .then((r) => r.json())
-      .then((data) => { if (Array.isArray(data)) setPrompts(data); })
+      .then((data) => {
+        if (Array.isArray(data)) setPrompts(data);
+      })
       .catch(() => {});
   }, []);
 
@@ -67,15 +83,73 @@ export default function NewTaskPage() {
     setFiles((prev) => [...prev, ...dropped]);
   }, []);
 
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
-    }
-  }, []);
+  const handleFileSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files) {
+        setFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+      }
+    },
+    [],
+  );
 
   const removeFile = (index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
+
+  function uploadFileWithProgress(
+    url: string,
+    file: File,
+    index: number,
+    signal: AbortSignal,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", url);
+
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable) {
+          setFileProgress((prev) =>
+            prev.map((fp, i) =>
+              i === index ? { ...fp, loaded: e.loaded, status: "uploading" } : fp,
+            ),
+          );
+        }
+      });
+
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          setFileProgress((prev) =>
+            prev.map((fp, i) =>
+              i === index ? { ...fp, loaded: file.size, status: "done" } : fp,
+            ),
+          );
+          resolve();
+        } else {
+          const err = `Upload failed (${xhr.status})`;
+          setFileProgress((prev) =>
+            prev.map((fp, i) =>
+              i === index ? { ...fp, status: "error", error: err } : fp,
+            ),
+          );
+          reject(new Error(err));
+        }
+      });
+
+      xhr.addEventListener("error", () => {
+        const err = "Network error during upload";
+        setFileProgress((prev) =>
+          prev.map((fp, i) =>
+            i === index ? { ...fp, status: "error", error: err } : fp,
+          ),
+        );
+        reject(new Error(err));
+      });
+
+      signal.addEventListener("abort", () => xhr.abort());
+
+      xhr.send(file);
+    });
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,39 +157,89 @@ export default function NewTaskPage() {
 
     setSubmitting(true);
     setError(null);
+    setUploadPhase("uploading");
 
-    const formData = new FormData();
-    formData.append("title", title);
-    if (instructions.trim()) formData.append("instructions", instructions);
-    files.forEach((f) => formData.append("files", f));
-    if (showNotifications && notificationEmail.trim()) {
-      formData.append("notification_email", notificationEmail.trim());
-      formData.append("notify_on_success", notifyOnSuccess ? "1" : "0");
-      formData.append("notify_on_error", notifyOnError ? "1" : "0");
-    }
+    const taskId = uuidv4();
+    const abort = new AbortController();
+    abortRef.current = abort;
+
+    const initialProgress: FileProgress[] = files.map((f) => ({
+      name: f.name,
+      size: f.size,
+      loaded: 0,
+      status: "pending",
+    }));
+    setFileProgress(initialProgress);
 
     try {
-      const res = await fetch("/api/tasks", { method: "POST", body: formData });
-      if (!res.ok) {
-        let message = `Server error (${res.status})`;
-        try {
-          const data = await res.json();
-          message = data.error || message;
-        } catch {
-          const text = await res.text().catch(() => "");
-          if (res.status === 413 || text.includes("Too Large")) {
-            message = "Upload too large. Maximum total size is 50 MB.";
-          }
-        }
-        throw new Error(message);
+      const presignRes = await fetch("/api/upload/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taskId,
+          files: files.map((f) => ({ name: f.name })),
+        }),
+        signal: abort.signal,
+      });
+
+      if (!presignRes.ok) {
+        throw new Error("Failed to get upload URLs");
       }
-      const task = await res.json();
+
+      const { files: presigned } = (await presignRes.json()) as {
+        files: { name: string; key: string; uploadUrl: string }[];
+      };
+
+      await Promise.all(
+        presigned.map((p, i) =>
+          uploadFileWithProgress(p.uploadUrl, files[i], i, abort.signal),
+        ),
+      );
+
+      setUploadPhase("creating");
+
+      const taskRes = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          instructions: instructions.trim() || undefined,
+          s3Keys: presigned.map((p) => p.key),
+          notification_email:
+            showNotifications && notificationEmail.trim()
+              ? notificationEmail.trim()
+              : undefined,
+          notify_on_success:
+            showNotifications && notificationEmail.trim()
+              ? notifyOnSuccess
+              : undefined,
+          notify_on_error:
+            showNotifications && notificationEmail.trim()
+              ? notifyOnError
+              : undefined,
+        }),
+        signal: abort.signal,
+      });
+
+      if (!taskRes.ok) {
+        const data = await taskRes.json().catch(() => null);
+        throw new Error(data?.error || `Server error (${taskRes.status})`);
+      }
+
+      const task = await taskRes.json();
       router.push(`/tasks/${task.id}`);
     } catch (err: unknown) {
+      if ((err as Error).name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Unknown error");
       setSubmitting(false);
+      setUploadPhase("idle");
     }
   }
+
+  const totalBytes = fileProgress.reduce((s, f) => s + f.size, 0);
+  const loadedBytes = fileProgress.reduce((s, f) => s + f.loaded, 0);
+  const overallPercent =
+    totalBytes > 0 ? Math.round((loadedBytes / totalBytes) * 100) : 0;
 
   const ACCEPTED_TYPES = ".pdf,.xlsx,.xls,.xlsm,.png,.jpg,.jpeg,.gif,.webp,.csv,.json,.txt";
 
@@ -209,27 +333,58 @@ export default function NewTaskPage() {
 
           {files.length > 0 && (
             <ul className="mt-3 space-y-1">
-              {files.map((file, i) => (
-                <li
-                  key={`${file.name}-${i}`}
-                  className="flex items-center justify-between rounded-lg bg-zinc-800 px-3 py-2 text-sm"
-                >
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <FileIcon className="h-4 w-4 shrink-0 text-zinc-400" />
-                    <span className="truncate">{file.name}</span>
-                    <span className="shrink-0 text-xs text-zinc-500">
-                      ({(file.size / 1024).toFixed(1)} KB)
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeFile(i)}
-                    className="text-zinc-500 hover:text-red-400"
+              {files.map((file, i) => {
+                const fp = fileProgress[i];
+                const pct =
+                  fp && fp.size > 0
+                    ? Math.round((fp.loaded / fp.size) * 100)
+                    : 0;
+
+                return (
+                  <li
+                    key={`${file.name}-${i}`}
+                    className="relative overflow-hidden rounded-lg bg-zinc-800 px-3 py-2 text-sm"
                   >
-                    <XIcon className="h-4 w-4" />
-                  </button>
-                </li>
-              ))}
+                    {fp && fp.status === "uploading" && (
+                      <div
+                        className="absolute inset-y-0 left-0 bg-indigo-500/15 transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
+                    )}
+                    <div className="relative flex items-center justify-between">
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <FileIcon className="h-4 w-4 shrink-0 text-zinc-400" />
+                        <span className="truncate">{file.name}</span>
+                        <span className="shrink-0 text-xs text-zinc-500">
+                          ({formatSize(file.size)})
+                        </span>
+                        {fp?.status === "uploading" && (
+                          <span className="shrink-0 text-xs text-indigo-400">
+                            {pct}%
+                          </span>
+                        )}
+                        {fp?.status === "done" && (
+                          <CheckIcon className="h-4 w-4 shrink-0 text-green-400" />
+                        )}
+                        {fp?.status === "error" && (
+                          <span className="shrink-0 text-xs text-red-400">
+                            {fp.error}
+                          </span>
+                        )}
+                      </div>
+                      {!submitting && (
+                        <button
+                          type="button"
+                          onClick={() => removeFile(i)}
+                          className="text-zinc-500 hover:text-red-400"
+                        >
+                          <XIcon className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -290,12 +445,31 @@ export default function NewTaskPage() {
           </div>
         )}
 
+        {uploadPhase === "uploading" && (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs text-zinc-400">
+              <span>Uploading files...</span>
+              <span>{overallPercent}%</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-zinc-700">
+              <div
+                className="h-full rounded-full bg-indigo-500 transition-all"
+                style={{ width: `${overallPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         <button
           type="submit"
           disabled={!title.trim() || files.length === 0 || submitting}
           className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {submitting ? "Creating..." : "Create Task"}
+          {uploadPhase === "uploading"
+            ? `Uploading... ${overallPercent}%`
+            : uploadPhase === "creating"
+              ? "Creating task..."
+              : "Create Task"}
         </button>
       </form>
     </div>
@@ -340,4 +514,18 @@ function ChevronIcon({ className }: { className?: string }) {
       <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
     </svg>
   );
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+    </svg>
+  );
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

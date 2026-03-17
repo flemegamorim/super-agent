@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { createTask, getTask, listTasks, updateTask } from "@/lib/db";
-import { saveUploadedFile, listOutputFiles } from "@/lib/files";
+import { listOutputFiles } from "@/lib/files";
 import { createSession, sendPrompt } from "@/lib/opencode";
 import { sendTaskNotificationEmail } from "@/lib/email";
+import { downloadToLocal } from "@/lib/s3";
+
+interface CreateTaskBody {
+  title: string;
+  instructions?: string;
+  s3Keys: string[];
+  notification_email?: string;
+  notify_on_success?: boolean;
+  notify_on_error?: boolean;
+}
 
 export async function GET() {
   const tasks = listTasks();
@@ -11,55 +21,52 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const formData = await request.formData();
-  const title = formData.get("title") as string;
-  const instructions = formData.get("instructions") as string | null;
-  const files = formData.getAll("files") as File[];
-  const notificationEmail = formData.get("notification_email") as string | null;
-  const notifyOnSuccess = formData.get("notify_on_success") === "1";
-  const notifyOnError = formData.get("notify_on_error") === "1";
+  const body = (await request.json()) as CreateTaskBody;
 
-  if (!title) {
+  if (!body.title) {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
   }
 
-  if (files.length === 0) {
-    return NextResponse.json({ error: "At least one file is required" }, { status: 400 });
+  if (!Array.isArray(body.s3Keys) || body.s3Keys.length === 0) {
+    return NextResponse.json(
+      { error: "At least one file is required" },
+      { status: 400 },
+    );
   }
 
   const taskId = uuidv4();
-  const savedFiles: string[] = [];
 
-  for (const file of files) {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const filePath = await saveUploadedFile(taskId, file.name, buffer);
-    savedFiles.push(filePath);
-  }
+  const savedFiles = await Promise.all(
+    body.s3Keys.map((key) => downloadToLocal(key, taskId)),
+  );
 
   const task = createTask({
     id: taskId,
-    title,
-    instructions: instructions || undefined,
+    title: body.title,
+    instructions: body.instructions,
     input_files: savedFiles,
-    notification_email: notificationEmail || undefined,
-    notify_on_success: notifyOnSuccess,
-    notify_on_error: notifyOnError,
+    notification_email: body.notification_email,
+    notify_on_success: body.notify_on_success ?? false,
+    notify_on_error: body.notify_on_error ?? false,
   });
 
-  launchTask(taskId, title, instructions, savedFiles).catch(async (err) => {
-    console.error(`Failed to launch task ${taskId}:`, err);
-    const hasOutput = listOutputFiles(taskId).length > 0;
-    if (hasOutput) {
-      updateTask(taskId, { status: "completed" });
-    } else {
-      const message = err instanceof Error
-        ? [err.message, err.stack].filter(Boolean).join("\n\n")
-        : String(err);
-      updateTask(taskId, { status: "failed", error: message });
-    }
-    const updatedTask = getTask(taskId);
-    if (updatedTask) await sendTaskNotificationEmail(updatedTask);
-  });
+  launchTask(taskId, body.title, body.instructions ?? null, savedFiles).catch(
+    async (err) => {
+      console.error(`Failed to launch task ${taskId}:`, err);
+      const hasOutput = listOutputFiles(taskId).length > 0;
+      if (hasOutput) {
+        updateTask(taskId, { status: "completed" });
+      } else {
+        const message =
+          err instanceof Error
+            ? [err.message, err.stack].filter(Boolean).join("\n\n")
+            : String(err);
+        updateTask(taskId, { status: "failed", error: message });
+      }
+      const updatedTask = getTask(taskId);
+      if (updatedTask) await sendTaskNotificationEmail(updatedTask);
+    },
+  );
 
   return NextResponse.json(task, { status: 201 });
 }
