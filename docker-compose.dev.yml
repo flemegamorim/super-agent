@@ -1,0 +1,34 @@
+services:
+  app:
+    build:
+      context: .
+      target: dev          # uses the dev stage — no Next.js build required
+    command: sh -c "opencode serve --port 4096 & cd web && npm run dev"
+    environment:
+      - NODE_ENV=development
+      # Required for Webpack file-watching to work through bind mounts on Windows/WSL/VM hosts.
+      # (Turbopack ignores this — we use --webpack in the dev script to force Webpack.)
+      - WATCHPACK_POLLING=true
+    volumes:
+      - app-data:/app/web/.data
+      - ./input:/app/input
+      - ./output:/app/output
+      # Bind-mount the entire web directory so Next.js sees tsconfig, next.config, src, etc.
+      # Named volumes preserve node_modules and .next built inside the container.
+      - ./web:/app/web
+      - web-node-modules:/app/web/node_modules
+      - web-next:/app/web/.next
+      - ./.opencode:/app/.opencode
+      - ./prompts:/app/prompts
+      - ./opencode.json:/app/opencode.json
+    ports:
+      - "3000:3000"   # Next.js dev server (HMR on same port via WebSocket)
+      - "4096:4096"   # OpenCode
+
+  # Skip nginx for local dev — hit port 3000 directly
+  nginx:
+    profiles: ["prod"]
+
+volumes:
+  web-node-modules:
+  web-next:

@@ -8,7 +8,9 @@
     "dev:web": "npm run dev --prefix web",
     "dev:opencode": "opencode serve --port 4096",
     "build": "npm run build --prefix web",
-    "start": "concurrently \"opencode serve --port 4096\" \"npm run start --prefix web\""
+    "start": "concurrently \"opencode serve --port 4096\" \"npm run start --prefix web\"",
+    "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
+    "docker:dev:fresh": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build --no-cache"
   },
   "devDependencies": {
     "concurrently": "^9.0.0"

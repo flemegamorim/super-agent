@@ -29,6 +29,13 @@ export function getOutputFilePath(taskId: string, filename: string): string | nu
   return filePath;
 }
 
+export function deleteTaskDirs(taskId: string): void {
+  const inputDir = path.join(INPUT_DIR, taskId);
+  const outputDir = path.join(OUTPUT_DIR, taskId);
+  if (fs.existsSync(inputDir)) fs.rmSync(inputDir, { recursive: true, force: true });
+  if (fs.existsSync(outputDir)) fs.rmSync(outputDir, { recursive: true, force: true });
+}
+
 export async function saveUploadedFile(
   taskId: string,
   filename: string,
