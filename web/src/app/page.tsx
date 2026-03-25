@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { formatDistanceToNow } from "date-fns";
 
 interface Task {
@@ -16,6 +17,8 @@ interface Task {
 export default function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [confirmTaskId, setConfirmTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTasks();
@@ -32,6 +35,21 @@ export default function DashboardPage() {
     }
   }
 
+  function requestDelete(e: React.MouseEvent, taskId: string) {
+    e.preventDefault();
+    setConfirmTaskId(taskId);
+  }
+
+  async function confirmDelete() {
+    if (!confirmTaskId) return;
+    const id = confirmTaskId;
+    setConfirmTaskId(null);
+    setDeletingIds((prev) => new Set(prev).add(id));
+    await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+    setDeletingIds((prev) => { const s = new Set(prev); s.delete(id); return s; });
+  }
+
   const stats = {
     total: tasks.length,
     running: tasks.filter((t) => t.status === "running").length,
@@ -39,8 +57,18 @@ export default function DashboardPage() {
     failed: tasks.filter((t) => t.status === "failed").length,
   };
 
+  const confirmTask = tasks.find((t) => t.id === confirmTaskId);
+
   return (
     <div className="p-8">
+      <ConfirmDialog
+        open={confirmTaskId !== null}
+        title="Delete task?"
+        description={`"${confirmTask?.title}" and all its input/output files will be permanently removed. This cannot be undone.`}
+        confirmLabel="Delete task"
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmTaskId(null)}
+      />
       <div className="mb-8">
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <p className="mt-1 text-sm text-zinc-400">
@@ -81,22 +109,30 @@ export default function DashboardPage() {
         ) : (
           <div className="divide-y divide-zinc-800">
             {tasks.map((task) => (
-              <Link
-                key={task.id}
-                href={`/tasks/${task.id}`}
-                className="flex items-center gap-4 px-6 py-4 transition-colors hover:bg-zinc-800/50"
-              >
-                <div className="flex-1">
-                  <p className="text-sm font-medium">{task.title}</p>
-                  <p className="mt-0.5 text-xs text-zinc-500">
-                    {task.input_files.length} file(s) &middot;{" "}
-                    {formatDistanceToNow(new Date(task.created_at + "Z"), {
-                      addSuffix: true,
-                    })}
-                  </p>
-                </div>
-                <StatusBadge status={task.status} />
-              </Link>
+              <div key={task.id} className="flex items-center gap-4 px-6 py-4 transition-colors hover:bg-zinc-800/50">
+                <Link href={`/tasks/${task.id}`} className="flex flex-1 items-center gap-4 min-w-0">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{task.title}</p>
+                    <p className="mt-0.5 text-xs text-zinc-500">
+                      {task.input_files.length} file(s) &middot;{" "}
+                      {formatDistanceToNow(new Date(task.created_at + "Z"), {
+                        addSuffix: true,
+                      })}
+                    </p>
+                  </div>
+                  <StatusBadge status={task.status} />
+                </Link>
+                <button
+                  onClick={(e) => requestDelete(e, task.id)}
+                  disabled={deletingIds.has(task.id)}
+                  className="ml-2 shrink-0 rounded-md p-1.5 text-zinc-600 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
+                  title="Delete task"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
             ))}
           </div>
         )}

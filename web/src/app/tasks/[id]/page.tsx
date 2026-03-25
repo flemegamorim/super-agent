@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState, useRef, useMemo, use } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { formatDistanceToNow } from "date-fns";
 
 interface Task {
@@ -140,10 +142,13 @@ export default function TaskDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const router = useRouter();
   const [task, setTask] = useState<Task | null>(null);
   const [outputs, setOutputs] = useState<OutputFile[]>([]);
   const [events, setEvents] = useState<SSEEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const eventsEndRef = useRef<HTMLDivElement>(null);
   const activityItems = useMemo(() => buildActivityItems(events), [events]);
 
@@ -202,6 +207,13 @@ export default function TaskDetailPage({
     fetchTask();
   }
 
+  async function handleDelete() {
+    setDeleting(true);
+    setConfirmOpen(false);
+    await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+    router.push("/");
+  }
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-zinc-500">
@@ -223,6 +235,14 @@ export default function TaskDetailPage({
 
   return (
     <div className="p-8">
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Delete task?"
+        description={`"${task.title}" and all its input/output files will be permanently removed. This cannot be undone.`}
+        confirmLabel="Delete task"
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmOpen(false)}
+      />
       <div className="mb-6 flex items-start justify-between">
         <div>
           <Link
@@ -264,6 +284,13 @@ export default function TaskDetailPage({
               Re-run
             </button>
           )}
+          <button
+            onClick={() => setConfirmOpen(true)}
+            disabled={deleting}
+            className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:border-red-500/50 hover:text-red-400 disabled:opacity-50"
+          >
+            {deleting ? "Deleting..." : "Delete"}
+          </button>
         </div>
       </div>
 

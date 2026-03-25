@@ -28,12 +28,8 @@ export default function SettingsPage() {
 
   const [model, setModel] = useState("");
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
-  const [savingModel, setSavingModel] = useState(false);
-  const [modelSaved, setModelSaved] = useState(false);
 
   const [systemPrompt, setSystemPrompt] = useState("");
-  const [savingPrompt, setSavingPrompt] = useState(false);
-  const [promptSaved, setPromptSaved] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -57,48 +53,30 @@ export default function SettingsPage() {
     setSaving(true);
     setSaved(false);
     try {
-      const res = await fetch("/api/settings/notifications", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          default_notification_email: email,
-          default_notify_on_success: notifyOnSuccess,
-          default_notify_on_error: notifyOnError,
+      const results = await Promise.all([
+        fetch("/api/settings/notifications", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            default_notification_email: email,
+            default_notify_on_success: notifyOnSuccess,
+            default_notify_on_error: notifyOnError,
+          }),
         }),
-      });
-      if (res.ok) setSaved(true);
+        fetch("/api/settings/model", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model }),
+        }),
+        fetch("/api/settings/system-prompt", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ system_prompt: systemPrompt }),
+        }),
+      ]);
+      if (results.every((r) => r.ok)) setSaved(true);
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleSaveModel() {
-    setSavingModel(true);
-    setModelSaved(false);
-    try {
-      const res = await fetch("/api/settings/model", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model }),
-      });
-      if (res.ok) setModelSaved(true);
-    } finally {
-      setSavingModel(false);
-    }
-  }
-
-  async function handleSavePrompt() {
-    setSavingPrompt(true);
-    setPromptSaved(false);
-    try {
-      const res = await fetch("/api/settings/system-prompt", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ system_prompt: systemPrompt }),
-      });
-      if (res.ok) setPromptSaved(true);
-    } finally {
-      setSavingPrompt(false);
     }
   }
 
@@ -152,18 +130,6 @@ export default function SettingsPage() {
             </p>
           </div>
 
-          <div className="mt-6 flex items-center gap-3">
-            <button
-              onClick={handleSaveModel}
-              disabled={savingModel}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {savingModel ? "Saving..." : "Save Model"}
-            </button>
-            {modelSaved && (
-              <span className="text-sm text-emerald-400">Model saved</span>
-            )}
-          </div>
         </div>
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
@@ -198,18 +164,6 @@ export default function SettingsPage() {
             </p>
           </div>
 
-          <div className="mt-6 flex items-center gap-3">
-            <button
-              onClick={handleSavePrompt}
-              disabled={savingPrompt}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {savingPrompt ? "Saving..." : "Save Prompt"}
-            </button>
-            {promptSaved && (
-              <span className="text-sm text-emerald-400">Prompt saved</span>
-            )}
-          </div>
         </div>
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
@@ -265,21 +219,20 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="mt-6 flex items-center gap-3">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {saving ? "Saving..." : "Save Settings"}
-            </button>
-            {saved && (
-              <span className="text-sm text-emerald-400">
-                Settings saved
-              </span>
-            )}
-          </div>
         </div>
+      </div>
+
+      <div className="mt-6 flex items-center gap-3">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save Settings"}
+        </button>
+        {saved && (
+          <span className="text-sm text-emerald-400">Settings saved</span>
+        )}
       </div>
     </div>
   );
