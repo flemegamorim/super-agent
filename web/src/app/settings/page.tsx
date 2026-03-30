@@ -8,6 +8,11 @@ interface NotificationPrefs {
   default_notify_on_error: boolean;
 }
 
+interface RetryPrefs {
+  default_retry_count: number;
+  default_retry_interval_minutes: number;
+}
+
 interface AvailableModel {
   id: string;
   name: string;
@@ -31,19 +36,25 @@ export default function SettingsPage() {
 
   const [systemPrompt, setSystemPrompt] = useState("");
 
+  const [retryCount, setRetryCount] = useState(0);
+  const [retryIntervalMinutes, setRetryIntervalMinutes] = useState(5);
+
   useEffect(() => {
     Promise.all([
       fetch("/api/settings/notifications").then((r) => r.json()),
       fetch("/api/settings/model").then((r) => r.json()),
       fetch("/api/settings/system-prompt").then((r) => r.json()),
+      fetch("/api/settings/retry").then((r) => r.json()),
     ])
-      .then(([notifData, modelData, promptData]: [NotificationPrefs, ModelSettings, { system_prompt: string | null }]) => {
+      .then(([notifData, modelData, promptData, retryData]: [NotificationPrefs, ModelSettings, { system_prompt: string | null }, RetryPrefs]) => {
         setEmail(notifData.default_notification_email ?? "");
         setNotifyOnSuccess(notifData.default_notify_on_success);
         setNotifyOnError(notifData.default_notify_on_error);
         setModel(modelData.model ?? "");
         setAvailableModels(modelData.available_models ?? []);
         setSystemPrompt(promptData.system_prompt ?? "");
+        setRetryCount(retryData.default_retry_count ?? 0);
+        setRetryIntervalMinutes(retryData.default_retry_interval_minutes ?? 5);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -72,6 +83,14 @@ export default function SettingsPage() {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ system_prompt: systemPrompt }),
+        }),
+        fetch("/api/settings/retry", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            default_retry_count: retryCount,
+            default_retry_interval_minutes: retryIntervalMinutes,
+          }),
         }),
       ]);
       if (results.every((r) => r.ok)) setSaved(true);
@@ -164,6 +183,67 @@ export default function SettingsPage() {
             </p>
           </div>
 
+        </div>
+
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+          <div className="flex items-center gap-3">
+            <RetryIcon className="h-5 w-5 text-indigo-400" />
+            <h2 className="text-lg font-semibold">Task Re-engagement</h2>
+          </div>
+          <p className="mt-1 text-sm text-zinc-500">
+            Automatically retry failed tasks. These defaults are snapshotted at task creation time — changing them later will not affect existing tasks.
+          </p>
+
+          <div className="mt-6 grid grid-cols-2 gap-5">
+            <div>
+              <label
+                htmlFor="retry_count"
+                className="block text-sm font-medium text-zinc-300"
+              >
+                Max Retries
+              </label>
+              <select
+                id="retry_count"
+                value={retryCount}
+                onChange={(e) => setRetryCount(Number(e.target.value))}
+                className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-indigo-500"
+              >
+                {[0, 1, 2, 3].map((n) => (
+                  <option key={n} value={n}>
+                    {n === 0 ? "No retries" : `${n} retr${n === 1 ? "y" : "ies"}`}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-xs text-zinc-500">
+                How many times to automatically retry a failed task.
+              </p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="retry_interval"
+                className="block text-sm font-medium text-zinc-300"
+              >
+                Retry Interval
+              </label>
+              <select
+                id="retry_interval"
+                value={retryIntervalMinutes}
+                onChange={(e) => setRetryIntervalMinutes(Number(e.target.value))}
+                disabled={retryCount === 0}
+                className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {[5, 10, 15, 20, 25, 30].map((m) => (
+                  <option key={m} value={m}>
+                    {m} minutes
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-xs text-zinc-500">
+                How long to wait before each retry attempt.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
@@ -269,6 +349,24 @@ function DocumentIcon({ className }: { className?: string }) {
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"
+      />
+    </svg>
+  );
+}
+
+function RetryIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.5}
+      stroke="currentColor"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
       />
     </svg>
   );

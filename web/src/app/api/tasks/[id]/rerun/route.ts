@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTask, updateTask, getActiveSystemPrompt } from "@/lib/db";
+import { getTask, updateTask } from "@/lib/db";
 import { listOutputFiles } from "@/lib/files";
-import { createSession, sendPrompt } from "@/lib/opencode";
 import { sendTaskNotificationEmail } from "@/lib/email";
+import { launchTask } from "@/app/api/tasks/route";
 
 export async function POST(
   _request: NextRequest,
@@ -19,7 +19,9 @@ export async function POST(
     return NextResponse.json({ error: "Task is already running" }, { status: 400 });
   }
 
-  rerunTask(id, task.title, task.instructions, task.input_files).catch(async (err) => {
+  const updated = updateTask(id, { status: "running", error: null, retry_attempt: 0, next_retry_at: null });
+
+  launchTask(id, task.title, task.instructions, task.input_files, 0, task.retry_count, task.retry_interval_minutes).catch(async (err) => {
     console.error(`Failed to re-run task ${id}:`, err);
     const hasOutput = listOutputFiles(id).length > 0;
     if (hasOutput) {
@@ -34,45 +36,5 @@ export async function POST(
     if (updatedTask) await sendTaskNotificationEmail(updatedTask);
   });
 
-  const updated = updateTask(id, { status: "running", error: null });
   return NextResponse.json(updated);
-}
-
-async function rerunTask(
-  taskId: string,
-  title: string,
-  instructions: string | null,
-  files: string[],
-) {
-  const session = await createSession(`Re-run: ${title}`);
-  if (!session) throw new Error("Failed to create OpenCode session");
-  updateTask(taskId, { session_id: session.id, status: "running" });
-
-  const systemPrompt = getActiveSystemPrompt();
-  const fileList = files.map((f) => `- ${f}`).join("\n");
-  const prompt = [
-    systemPrompt ? `${systemPrompt}\n\n---\n\n` : "",
-    `Process the following input files:\n${fileList}`,
-    instructions ? `\nAdditional instructions: ${instructions}` : "",
-    `\nWrite all output files to the ./output/${taskId}/ directory.`,
-    `\nWhen done, list all generated output files.`,
-  ].join("");
-
-  try {
-    await sendPrompt(session.id, prompt);
-    updateTask(taskId, { status: "completed" });
-  } catch (err: unknown) {
-    const hasOutput = listOutputFiles(taskId).length > 0;
-    if (hasOutput) {
-      updateTask(taskId, { status: "completed" });
-    } else {
-      const message = err instanceof Error
-        ? [err.message, err.stack].filter(Boolean).join("\n\n")
-        : "Unknown error";
-      updateTask(taskId, { status: "failed", error: message });
-    }
-  }
-
-  const finalTask = getTask(taskId);
-  if (finalTask) await sendTaskNotificationEmail(finalTask);
 }

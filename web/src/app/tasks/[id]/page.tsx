@@ -19,6 +19,10 @@ interface Task {
   notification_email: string | null;
   notify_on_success: boolean;
   notify_on_error: boolean;
+  retry_count: number;
+  retry_interval_minutes: number;
+  retry_attempt: number;
+  next_retry_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -328,6 +332,29 @@ export default function TaskDetailPage({
           <pre className="max-h-64 overflow-auto whitespace-pre-wrap wrap-break-word rounded-lg bg-red-950/40 p-3 font-mono text-xs leading-relaxed text-red-300">
             {task.error}
           </pre>
+        </div>
+      )}
+
+      {task.status === "failed" && task.next_retry_at && (
+        <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+          <svg className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+          </svg>
+          <div className="text-sm">
+            <span className="font-medium text-amber-300">
+              Retry scheduled
+            </span>
+            <span className="ml-1 text-amber-400/80">
+              — attempt {task.retry_attempt + 2} of {task.retry_count + 1}
+            </span>
+            <span className="ml-1 text-zinc-400">
+              will run{" "}
+              <span className="text-zinc-200">
+                {formatDistanceToNow(new Date(task.next_retry_at), { addSuffix: true })}
+              </span>
+              {" "}(at {new Date(task.next_retry_at).toLocaleTimeString()})
+            </span>
+          </div>
         </div>
       )}
 

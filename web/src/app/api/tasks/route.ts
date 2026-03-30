@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import { createTask, getTask, listTasks, updateTask, getActiveSystemPrompt } from "@/lib/db";
+import { createTask, getTask, listTasks, updateTask, getActiveSystemPrompt, getActiveRetryPrefs } from "@/lib/db";
 import { listOutputFiles } from "@/lib/files";
 import { createSession, sendPrompt } from "@/lib/opencode";
 import { sendTaskNotificationEmail } from "@/lib/email";
@@ -40,6 +40,8 @@ export async function POST(request: NextRequest) {
     body.s3Keys.map((key) => downloadToLocal(key, taskId)),
   );
 
+  const retryPrefs = getActiveRetryPrefs();
+
   const task = createTask({
     id: taskId,
     title: body.title,
@@ -48,9 +50,11 @@ export async function POST(request: NextRequest) {
     notification_email: body.notification_email,
     notify_on_success: body.notify_on_success ?? false,
     notify_on_error: body.notify_on_error ?? false,
+    retry_count: retryPrefs.default_retry_count,
+    retry_interval_minutes: retryPrefs.default_retry_interval_minutes,
   });
 
-  launchTask(taskId, body.title, body.instructions ?? null, savedFiles).catch(
+  launchTask(taskId, body.title, body.instructions ?? null, savedFiles, 0, retryPrefs.default_retry_count, retryPrefs.default_retry_interval_minutes).catch(
     async (err) => {
       console.error(`Failed to launch task ${taskId}:`, err);
       const hasOutput = listOutputFiles(taskId).length > 0;
@@ -71,15 +75,18 @@ export async function POST(request: NextRequest) {
   return NextResponse.json(task, { status: 201 });
 }
 
-async function launchTask(
+export async function launchTask(
   taskId: string,
   title: string,
   instructions: string | null,
   files: string[],
+  attempt: number,
+  retryCount: number,
+  retryIntervalMinutes: number,
 ) {
   const session = await createSession(`Task: ${title}`);
   if (!session) throw new Error("Failed to create OpenCode session");
-  updateTask(taskId, { session_id: session.id, status: "running" });
+  updateTask(taskId, { session_id: session.id, status: "running", next_retry_at: null });
 
   const systemPrompt = getActiveSystemPrompt();
   const fileList = files.map((f) => `- ${f}`).join("\n");
@@ -102,7 +109,34 @@ async function launchTask(
       const message = err instanceof Error
         ? [err.message, err.stack].filter(Boolean).join("\n\n")
         : "Unknown error";
-      updateTask(taskId, { status: "failed", error: message });
+
+      if (attempt < retryCount) {
+        const nextRetryAt = new Date(Date.now() + retryIntervalMinutes * 60_000).toISOString();
+        updateTask(taskId, { status: "failed", error: message, retry_attempt: attempt, next_retry_at: nextRetryAt });
+        setTimeout(() => {
+          updateTask(taskId, { retry_attempt: attempt + 1, next_retry_at: null, status: "running" });
+          launchTask(taskId, title, instructions, files, attempt + 1, retryCount, retryIntervalMinutes).catch(async (retryErr) => {
+            console.error(`Auto-retry ${attempt + 1} failed for task ${taskId}:`, retryErr);
+            const hasOutputOnRetry = listOutputFiles(taskId).length > 0;
+            if (hasOutputOnRetry) {
+              updateTask(taskId, { status: "completed" });
+            } else {
+              const retryMessage = retryErr instanceof Error
+                ? [retryErr.message, retryErr.stack].filter(Boolean).join("\n\n")
+                : String(retryErr);
+              updateTask(taskId, { status: "failed", error: retryMessage, next_retry_at: null });
+            }
+            const finalTask = getTask(taskId);
+            if (finalTask) await sendTaskNotificationEmail(finalTask);
+          });
+        }, retryIntervalMinutes * 60_000);
+
+        const scheduledTask = getTask(taskId);
+        if (scheduledTask) await sendTaskNotificationEmail(scheduledTask);
+        return;
+      }
+
+      updateTask(taskId, { status: "failed", error: message, next_retry_at: null });
     }
   }
 

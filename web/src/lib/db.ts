@@ -46,6 +46,18 @@ function getDb(): Database.Database {
     if (!colNames.has("notify_on_error")) {
       _db.exec(`ALTER TABLE tasks ADD COLUMN notify_on_error INTEGER NOT NULL DEFAULT 0`);
     }
+    if (!colNames.has("retry_count")) {
+      _db.exec(`ALTER TABLE tasks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0`);
+    }
+    if (!colNames.has("retry_interval_minutes")) {
+      _db.exec(`ALTER TABLE tasks ADD COLUMN retry_interval_minutes INTEGER NOT NULL DEFAULT 5`);
+    }
+    if (!colNames.has("retry_attempt")) {
+      _db.exec(`ALTER TABLE tasks ADD COLUMN retry_attempt INTEGER NOT NULL DEFAULT 0`);
+    }
+    if (!colNames.has("next_retry_at")) {
+      _db.exec(`ALTER TABLE tasks ADD COLUMN next_retry_at TEXT`);
+    }
 
     _db.exec(`
       CREATE TABLE IF NOT EXISTS users (
@@ -72,6 +84,12 @@ function getDb(): Database.Database {
     if (!userColNames.has("system_prompt")) {
       _db.exec(`ALTER TABLE users ADD COLUMN system_prompt TEXT`);
     }
+    if (!userColNames.has("default_retry_count")) {
+      _db.exec(`ALTER TABLE users ADD COLUMN default_retry_count INTEGER NOT NULL DEFAULT 0`);
+    }
+    if (!userColNames.has("default_retry_interval_minutes")) {
+      _db.exec(`ALTER TABLE users ADD COLUMN default_retry_interval_minutes INTEGER NOT NULL DEFAULT 5`);
+    }
   }
   return _db;
 }
@@ -88,6 +106,10 @@ export interface Task {
   notification_email: string | null;
   notify_on_success: boolean;
   notify_on_error: boolean;
+  retry_count: number;
+  retry_interval_minutes: number;
+  retry_attempt: number;
+  next_retry_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -104,6 +126,10 @@ interface TaskRow {
   notification_email: string | null;
   notify_on_success: number;
   notify_on_error: number;
+  retry_count: number;
+  retry_interval_minutes: number;
+  retry_attempt: number;
+  next_retry_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -116,6 +142,10 @@ function rowToTask(row: TaskRow): Task {
     output_files: JSON.parse(row.output_files),
     notify_on_success: !!row.notify_on_success,
     notify_on_error: !!row.notify_on_error,
+    retry_count: row.retry_count ?? 0,
+    retry_interval_minutes: row.retry_interval_minutes ?? 5,
+    retry_attempt: row.retry_attempt ?? 0,
+    next_retry_at: row.next_retry_at ?? null,
   };
 }
 
@@ -127,10 +157,12 @@ export function createTask(task: {
   notification_email?: string;
   notify_on_success?: boolean;
   notify_on_error?: boolean;
+  retry_count?: number;
+  retry_interval_minutes?: number;
 }): Task {
   const db = getDb();
   db.prepare(
-    `INSERT INTO tasks (id, title, instructions, input_files, notification_email, notify_on_success, notify_on_error) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO tasks (id, title, instructions, input_files, notification_email, notify_on_success, notify_on_error, retry_count, retry_interval_minutes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.title,
@@ -139,6 +171,8 @@ export function createTask(task: {
     task.notification_email ?? null,
     task.notify_on_success ? 1 : 0,
     task.notify_on_error ? 1 : 0,
+    task.retry_count ?? 0,
+    task.retry_interval_minutes ?? 5,
   );
   return getTask(task.id)!;
 }
@@ -157,7 +191,7 @@ export function listTasks(): Task[] {
 
 export function updateTask(
   id: string,
-  updates: Partial<Pick<Task, "status" | "session_id" | "output_files" | "error">>,
+  updates: Partial<Pick<Task, "status" | "session_id" | "output_files" | "error" | "retry_attempt" | "next_retry_at">>,
 ): Task | null {
   const db = getDb();
   const sets: string[] = [];
@@ -178,6 +212,14 @@ export function updateTask(
   if (updates.error !== undefined) {
     sets.push("error = ?");
     values.push(updates.error);
+  }
+  if (updates.retry_attempt !== undefined) {
+    sets.push("retry_attempt = ?");
+    values.push(updates.retry_attempt);
+  }
+  if (updates.next_retry_at !== undefined) {
+    sets.push("next_retry_at = ?");
+    values.push(updates.next_retry_at);
   }
 
   sets.push("updated_at = datetime('now')");
@@ -266,6 +308,8 @@ export interface User {
   default_notify_on_success: number;
   default_notify_on_error: number;
   system_prompt: string | null;
+  default_retry_count: number;
+  default_retry_interval_minutes: number;
   created_at: string;
 }
 
@@ -340,6 +384,41 @@ export function updateUserNotificationPrefs(
     prefs.default_notify_on_error ? 1 : 0,
     userId,
   );
+}
+
+export interface UserRetryPrefs {
+  default_retry_count: number;
+  default_retry_interval_minutes: number;
+}
+
+export function getUserRetryPrefs(userId: string): UserRetryPrefs | null {
+  const db = getDb();
+  const row = db.prepare(
+    `SELECT default_retry_count, default_retry_interval_minutes FROM users WHERE id = ?`,
+  ).get(userId) as { default_retry_count: number; default_retry_interval_minutes: number } | undefined;
+  if (!row) return null;
+  return {
+    default_retry_count: row.default_retry_count ?? 0,
+    default_retry_interval_minutes: row.default_retry_interval_minutes ?? 5,
+  };
+}
+
+export function updateUserRetryPrefs(userId: string, prefs: UserRetryPrefs): void {
+  const db = getDb();
+  db.prepare(
+    `UPDATE users SET default_retry_count = ?, default_retry_interval_minutes = ? WHERE id = ?`,
+  ).run(prefs.default_retry_count, prefs.default_retry_interval_minutes, userId);
+}
+
+export function getActiveRetryPrefs(): UserRetryPrefs {
+  const db = getDb();
+  const row = db.prepare(
+    `SELECT default_retry_count, default_retry_interval_minutes FROM users LIMIT 1`,
+  ).get() as { default_retry_count: number; default_retry_interval_minutes: number } | undefined;
+  return {
+    default_retry_count: row?.default_retry_count ?? 0,
+    default_retry_interval_minutes: row?.default_retry_interval_minutes ?? 5,
+  };
 }
 
 export function getSystemPrompt(userId: string): string | null {
